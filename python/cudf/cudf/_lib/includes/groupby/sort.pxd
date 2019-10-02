@@ -28,8 +28,7 @@ cdef extern from "cudf/groupby.hpp" namespace "cudf::groupby::sort" nogil:
         interpolation interp
 
     cdef cppclass operation:
-        operation(groupby_common.operators op_name,
-                  unique_ptr[operation_args] args)
+        operation(groupby_common.operators op_name, unique_ptr[operation_args] args)
         groupby_common.operators op_name
         unique_ptr[operation_args] args
 
@@ -65,6 +64,4 @@ cdef extern from "cudf/groupby.hpp" nogil:
 
 cdef extern from "<utility>" namespace "std" nogil:
     cdef unique_ptr[operation_args] move(unique_ptr[operation_args])
-    cdef unique_ptr[quantile_args] move(unique_ptr[quantile_args])
-    cdef operation move(operation)
     
