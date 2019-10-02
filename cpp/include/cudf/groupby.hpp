@@ -132,6 +132,9 @@ struct quantile_args : operation_args {
 };
 
 struct operation {
+  operation(operators op_name, std::unique_ptr<operation_args> args):
+    op_name(op_name),
+    args(std::move(args)) {}
   operators                         op_name;
   std::unique_ptr<operation_args>   args;
 };

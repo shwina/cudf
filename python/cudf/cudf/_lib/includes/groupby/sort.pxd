@@ -15,22 +15,43 @@ from cudf._lib.includes.quantile cimport interpolation
 
 cimport cudf._lib.includes.groupby.common as groupby_common
 
+
+ctypedef gdf_column* gdf_column_ptr
+
 cdef extern from "cudf/groupby.hpp" namespace "cudf::groupby::sort" nogil:
-    cdef cppclass operation_args "cudf::groupby::sort::operation_args":
+    cdef cppclass operation_args:
         pass
 
-    cdef cppclass quantile_args "cudf::groupby::sort::quantile_args":
+    cdef cppclass quantile_args(operation_args):
         quantile_args(vector[double] quantiles, interpolation interp) except +
         vector[double] quantiles
         interpolation interp
 
-    cdef cppclass operation "cudf::groupby::sort::operation":
+    cdef cppclass operation:
+        operation(groupby_common.operators op_name,
+                  unique_ptr[operation_args] args)
         groupby_common.operators op_name
         unique_ptr[operation_args] args
 
-    cdef enum null_order "cudf::groupby::sort::null_order":
+    cdef enum null_order:
         AFTER "cudf::groupby::sort::null_order::AFTER"
         BEFORE "cudf::groupby::sort::null_order::BEFORE"
+
+    cdef cppclass Options(groupby_common.Options):
+        Options(bool _ignore_null_keys,
+                null_order _null_sort_behavior,
+                bool _input_sorted) except +
+
+    cdef pair[cudf_table, vector[gdf_column_ptr]] groupby(
+        cudf_table keys,
+        cudf_table values,
+        vector[operation] ops) except +
+
+    cdef pair[cudf_table, vector[gdf_column_ptr]] groupby(
+        cudf_table keys,
+        cudf_table values,
+        vector[operation] ops,
+        Options options)
 
 
 cdef extern from "cudf/groupby.hpp" nogil:
@@ -40,3 +61,10 @@ cdef extern from "cudf/groupby.hpp" nogil:
         const gdf_index_type* key_col_indices,
         gdf_context* context
     ) except +
+
+
+cdef extern from "<utility>" namespace "std" nogil:
+    cdef unique_ptr[operation_args] move(unique_ptr[operation_args])
+    cdef unique_ptr[quantile_args] move(unique_ptr[quantile_args])
+    cdef operation move(operation)
+    

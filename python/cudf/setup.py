@@ -3,6 +3,7 @@ import os
 import sysconfig
 from distutils.sysconfig import get_python_lib
 
+import cython_mcpp
 import numpy as np
 import versioneer
 from Cython.Build import cythonize
@@ -23,6 +24,7 @@ extensions = [
             "../../cpp/build/include",
             os.path.dirname(sysconfig.get_path("include")),
             np.get_include(),
+            "/home/ashwint/local/cython_mcpp/include/",
         ],
         library_dirs=[get_python_lib(), os.path.join(os.sys.prefix, "lib")],
         libraries=["cudf"],
