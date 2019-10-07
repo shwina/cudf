@@ -50,7 +50,7 @@ cdef extern from "cudf/groupby.hpp" namespace "cudf::groupby::sort" nogil:
         cudf_table keys,
         cudf_table values,
         vector[operation] ops,
-        Options options)
+        Options options) except +
 
 
 cdef extern from "cudf/groupby.hpp" nogil:
