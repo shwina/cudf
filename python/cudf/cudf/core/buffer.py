@@ -14,7 +14,7 @@ class Buffer:
 
         Parameters
         ----------
-        data : array_like, int
+        data : Buffer, rmm._DevicePointer, array_like, int
             An array-like object or integer representing a
             device or host pointer to pre-allocated memory.
         size : int, optional
