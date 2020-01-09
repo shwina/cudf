@@ -84,6 +84,8 @@ class Buffer:
 
 def _buffer_data_from_array_interface(array_interface):
     ptr = array_interface["data"][0]
+    if ptr is None:
+        ptr = 0
     itemsize = np.dtype(array_interface["typestr"]).itemsize
     size = functools.reduce(operator.mul, array_interface["shape"])
     return ptr, size * itemsize
