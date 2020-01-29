@@ -144,7 +144,9 @@ cdef extern from "cudf/copying.hpp" namespace "cudf::experimental" nogil:
     )
 
 cdef extern from "cudf/null_mask.hpp" namespace "cudf" nogil:
-    cdef device_buffer copy_bitmask(column_view view)
+    cdef device_buffer copy_bitmask(bitmask_type* mask,
+                                    size_type begin,
+                                    size_type end)
 
 cdef extern from "<utility>" namespace "std" nogil:
     cdef unique_ptr[column] move(unique_ptr[column])

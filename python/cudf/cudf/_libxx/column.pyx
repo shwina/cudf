@@ -127,6 +127,24 @@ cdef class Column:
                 raise TypeError("mask must be a Buffer or None")
         self._set_mask(value)
 
+    def copy_mask(self, begin=None, end=None):
+        """
+        Copy the specified range of the bitmask
+        """
+        if begin is None:
+            begin = self.offset
+        if end is None:
+            end = self.mask.size
+        if begin == 0 and end == self.mask.size:
+            return self.mask
+        cdef device_buffer mask = copy_bitmask(
+            <bitmask_type*><uintptr_t>(self.mask.ptr),
+            begin,
+            end
+        )
+        return Buffer(<uintptr_t>mask.data(),
+                      <size_type>mask.size())
+
     def _set_mask(self, value):
         self._mask = value
         if hasattr(self, "null_count"):

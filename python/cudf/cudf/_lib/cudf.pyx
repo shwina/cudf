@@ -282,7 +282,7 @@ cdef gdf_column* column_view_from_column(Column col,
             data_ptr = 0
 
     if col.nullable:
-        valid_ptr = col.mask.ptr
+        valid_ptr = col.copy_mask().ptr
     else:
         valid_ptr = 0
 
