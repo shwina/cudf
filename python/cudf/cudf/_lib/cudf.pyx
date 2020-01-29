@@ -252,17 +252,6 @@ cdef gdf_column* column_view_from_column(Column col,
                                          col_name=None) except? NULL:
     """
     Make a column view from a column
-
-    Parameters
-    ----------
-    size: int
-        Data count.
-    data: Buffer
-        The data buffer.
-    mask: Buffer; optional
-        The mask buffer.
-    dtype: numpy.dtype; optional
-        The dtype of the data.  Defaults to *data.dtype*.
     """
     cdef gdf_column* c_col = <gdf_column*>malloc(sizeof(gdf_column))
     cdef uintptr_t data_ptr
