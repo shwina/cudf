@@ -36,7 +36,9 @@ class NumericalColumn(column.ColumnBase):
         if data.size % dtype.itemsize:
             raise ValueError("Buffer size must be divisible by element size")
         size = data.size // dtype.itemsize
-        super().__init__(data, size=size, dtype=dtype, mask=mask)
+        super().__init__(
+            data, size=size, dtype=dtype, mask=mask, offset=offset
+        )
 
     def __contains__(self, item):
         """
