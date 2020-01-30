@@ -587,7 +587,7 @@ class StringColumn(column.ColumnBase):
             ).data
             out_mask_ptr = out_mask.ptr
             self.nvstrings.set_null_bitmask(out_mask_ptr, bdevmem=True)
-            out_col.mask = out_mask
+            out_col._set_mask(out_mask)
 
         return out_col.astype(out_dtype)
 
@@ -780,7 +780,7 @@ class StringColumn(column.ColumnBase):
 
         filled_data = self.nvstrings.fillna(fill_value)
         result = column.as_column(filled_data)
-        result.mask = None
+        result._set_mask(None)
         return self._mimic_inplace(result, inplace)
 
     def _find_first_and_last(self, value):

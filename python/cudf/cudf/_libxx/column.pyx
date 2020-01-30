@@ -56,6 +56,7 @@ cdef class Column:
     * A *data* Buffer
     * One or more (optional) *children* Columns
     * An (optional) *mask* Buffer representing the nullmask
+    * The *offset* of the columns (in number of elements) is used for zero-
 
     The *dtype* indicates the Column's element type.
     """
@@ -98,8 +99,19 @@ cdef class Column:
         self.children = children
 
     @property
-    def data(self):
+    def base_data(self):
         return self._data
+
+    @property
+    def data(self):
+        if self.offset == 0:
+            return self._data
+        offset_bytes = self.offset * self.dtype.itemsize
+        return self._data[offset_bytes:]
+
+    @property
+    def mask(self):
+        return self.copy_mask()
 
     @data.setter
     def data(self, value):
@@ -110,35 +122,26 @@ cdef class Column:
 
     @property
     def nullable(self):
-        return self.mask is not None
+        return self._mask is not None
 
     @property
     def has_nulls(self):
         return self.null_count != 0
 
-    @property
-    def mask(self):
-        return self._mask
-
-    @mask.setter
-    def mask(self, value):
-        if value is not None:
-            if not isinstance(value, Buffer):
-                raise TypeError("mask must be a Buffer or None")
-        self._set_mask(value)
-
     def copy_mask(self, begin=None, end=None):
         """
         Copy the specified range of the bitmask
         """
+        if self._mask is None:
+            return None
         if begin is None:
             begin = self.offset
         if end is None:
-            end = self.mask.size
-        if begin == 0 and end == self.mask.size:
-            return self.mask
+            end = self._mask.size
+        if begin == 0 and end == self._mask.size:
+            return self._mask
         cdef device_buffer mask = copy_bitmask(
-            <bitmask_type*><uintptr_t>(self.mask.ptr),
+            <bitmask_type*><uintptr_t>(self._mask.ptr),
             begin,
             end
         )
@@ -146,6 +149,8 @@ cdef class Column:
                       <size_type>mask.size())
 
     def _set_mask(self, value):
+        if value is not None and not isinstance(value, Buffer):
+            raise TypeError("mask must be a Buffer or None")
         self._mask = value
         if hasattr(self, "null_count"):
             del self.null_count
@@ -170,7 +175,7 @@ cdef class Column:
         cdef vector[mutable_column_view] children
         cdef void* data
 
-        data = <void*><uintptr_t>(col.data.ptr)
+        data = <void*><uintptr_t>(col.base_data.ptr)
 
         cdef Column child_column
         if self.children:
@@ -179,7 +184,7 @@ cdef class Column:
 
         cdef bitmask_type* mask
         if self.nullable:
-            mask = <bitmask_type*><uintptr_t>(self.mask.ptr)
+            mask = <bitmask_type*><uintptr_t>(self._mask.ptr)
         else:
             mask = NULL
 
@@ -209,7 +214,7 @@ cdef class Column:
         cdef vector[column_view] children
         cdef void* data
 
-        data = <void*><uintptr_t>(col.data.ptr)
+        data = <void*><uintptr_t>(col.base_data.ptr)
 
         cdef Column child_column
         if self.children:

@@ -85,7 +85,7 @@ class Series(Frame):
             The number of null values.
             If None, it is calculated automatically.
         """
-        col = column.as_column(data).set_mask(mask)
+        col = column.as_column(data).set_mask_from_array(mask)
         return cls(data=col)
 
     def __init__(
@@ -383,7 +383,7 @@ class Series(Frame):
             If None, it is calculated automatically.
 
         """
-        col = self._column.set_mask(mask)
+        col = self._column.set_mask_from_array(mask)
         return self._copy_construct(data=col)
 
     def __sizeof__(self):
@@ -1374,7 +1374,7 @@ class Series(Frame):
         if self.dtype.kind == "f":
             sr = self.fillna(np.nan)
             newmask = libcudf.unaryops.nans_to_nulls(sr._column)
-            self._column.mask = newmask
+            self._column._set_mask(newmask)
         return self
 
     def all(self, axis=0, skipna=True, level=None):

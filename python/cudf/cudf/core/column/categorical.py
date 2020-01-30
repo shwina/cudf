@@ -203,7 +203,7 @@ class CategoricalAccessor(object):
 
         if kwargs.get("inplace", False):
             self._parent.data = None
-            self._parent.mask = new_codes.mask
+            self._parent._set_mask(new_codes.mask)
             self._parent.dtype = new_dtype
             self._parent.children = (new_codes,)
             return None
@@ -312,7 +312,8 @@ class CategoricalColumn(column.ColumnBase):
 
     @property
     def codes(self):
-        return self.children[0].set_mask(self.mask)
+        self.children[0]._set_mask(self.mask)
+        return self.children[0]
 
     @property
     def ordered(self):
@@ -489,7 +490,7 @@ class CategoricalColumn(column.ColumnBase):
             ordered=self.dtype.ordered,
         )
 
-        result.mask = None
+        result._set_mask(None)
         return self._mimic_inplace(result, inplace)
 
     def apply_boolean_mask(self, mask):
@@ -563,7 +564,7 @@ class CategoricalColumn(column.ColumnBase):
             return self.cat().codes._column
         gather_map = self.cat().codes.astype("int32").fillna(0)._column
         out = self.categories.take(gather_map)
-        out.mask = self.mask
+        out._set_mask(self.mask)
         return out
 
     def copy(self, deep=True):

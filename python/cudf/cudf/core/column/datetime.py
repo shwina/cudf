@@ -230,7 +230,7 @@ class DatetimeColumn(column.ColumnBase):
 
         result = libcudf.replace.replace_nulls(self, fill_value)
 
-        result.mask = None
+        result._set_mask(None)
         return self._mimic_inplace(result, inplace)
 
     def sort_by_values(self, ascending=True, na_position="last"):

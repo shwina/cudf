@@ -57,6 +57,17 @@ class Buffer:
                 raise TypeError("data must be Buffer, array-like or integer")
             self._init_from_array_like(np.asarray(data))
 
+    def __getitem__(self, key):
+        if not isinstance(key, slice):
+            raise TypeError(f"{self.__class__.__name__}: Invalid slice key")
+        start, stop, step = key.indices(self.size)
+        if step != 1:
+            raise TypeError(
+                f"{self.__class__.__name__} does not suppport "
+                "non-contiguous slices"
+            )
+        return Buffer(self.ptr + start, size=stop - start, owner=self._owner)
+
     def __reduce__(self):
         return self.__class__, (self.to_host_array(),)
 

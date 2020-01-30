@@ -282,7 +282,7 @@ cdef gdf_column* column_view_from_column(Column col,
             data_ptr = 0
 
     if col.nullable:
-        valid_ptr = col.copy_mask().ptr
+        valid_ptr = col.mask.ptr
     else:
         valid_ptr = 0
 
@@ -379,7 +379,7 @@ cdef gdf_column* column_view_from_string_column(
     cdef gdf_dtype c_dtype = GDF_STRING
 
     if col.nullable and col.has_nulls:
-        mask_ptr = col.copy_mask().ptr
+        mask_ptr = col.mask_ptr
     else:
         mask_ptr = 0
 

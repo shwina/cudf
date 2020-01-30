@@ -133,7 +133,7 @@ class ColumnBase(Column):
             n += self.mask.size
         return n
 
-    def set_mask(self, mask):
+    def set_mask_from_array(self, mask):
         """
         Return a Column with the same data but new mask.
 
@@ -287,15 +287,8 @@ class ColumnBase(Column):
             return column_empty_like(self, newsize=0)
         else:
             dropped_col = dropped_col[0]
-            dropped_col.mask = None
+            dropped_col._set_mask(None)
             return dropped_col
-
-    def _get_mask_as_column(self):
-        data = Buffer(cudautils.ones(len(self), dtype=np.bool_))
-        mask = as_column(data=data)
-        if self.nullable:
-            mask = mask.set_mask(self._mask).fillna(False)
-        return mask
 
     def _memory_usage(self, **kwargs):
         return self.__sizeof__()
@@ -311,7 +304,7 @@ class ColumnBase(Column):
         if nelem > 0:
             cudautils.fill_value(mask, 0xFF if all_valid else 0)
         mask = Buffer(mask)
-        return self.set_mask(mask=mask)
+        return self._set_mask(mask=mask)
 
     def to_gpu_array(self, fillna=None):
         """Get a dense numba device array for the data.
@@ -760,7 +753,7 @@ class ColumnBase(Column):
         """
         if inplace:
             self.data = result.data
-            self.mask = result.mask
+            self._set_mask(result.mask)
             self.dtype = result.dtype
             self.size = result.size
             self.offset = result.offset
@@ -915,7 +908,7 @@ def column_empty_like_same_mask(column, dtype):
     """
     result = column_empty_like(column, dtype)
     if column.nullable:
-        result.mask = column.mask
+        result._set_mask(column.mask)
     return result
 
 
@@ -1129,7 +1122,7 @@ def as_column(arbitrary, nan_as_null=True, dtype=None, length=None):
         ):
             if nan_as_null:
                 mask = libcudf.unaryops.nans_to_nulls(data)
-                data.mask = mask
+                data._set_mask(mask)
 
         elif data.dtype.kind == "M":
             null = column_empty_like(data, masked=True, newsize=1)
