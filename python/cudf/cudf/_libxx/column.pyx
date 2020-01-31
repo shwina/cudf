@@ -275,43 +275,36 @@ cdef class Column:
         cdef column_view result = cpp_slice(
             self.view(),
             indices)[0]
-        return Column.from_column_view(result, owner=self)
+        out = Column.from_column_view(result, owner=self)
+        out = out._copy_categories(self)
+        return out
 
     @staticmethod
-    cdef Column from_column_view(column_view cv, owner):
+    cdef Column from_column_view(column_view cv, Column owner):
         from cudf.core.column import build_column
+
+        if is_categorical_dtype(owner.dtype):
+            owner = owner.codes
 
         dtype = cudf_to_np_types[cv.type().id()]
         size = cv.size()
-
-        data_ptr = <uintptr_t>(cv.head())
-        data = None
-        if data_ptr:
-            data = Buffer(data=data_ptr, size=size*dtype.itemsize, owner=owner)
-
-        mask_ptr = <uintptr_t>(cv.null_mask())
-        mask = None
-        if mask_ptr:
-            mask = Buffer(mask=mask_ptr,
-                          size=calc_chunk_size(size, mask_bitsize),
-                          owner=owner)
-
         offset = cv.offset()
 
         children = []
         for child_index in range(cv.num_children()):
             children.append(
-                Column.from_column_view(cv.child(child_index), owner=owner)
+                Column.from_column_view(cv.child(child_index),
+                                        owner=owner.children[child_index])
             )
         children = tuple(children)
 
         result = build_column(
-            data,
-            dtype,
-            mask,
-            offset,
-            tuple(children)
+            data=owner.data,
+            dtype=dtype,
+            mask=owner.mask,
+            offset=offset,
+            children=tuple(children),
+            size=size
         )
-        result.size = size
 
         return result
