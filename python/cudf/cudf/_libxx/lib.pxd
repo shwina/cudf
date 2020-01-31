@@ -72,6 +72,7 @@ cdef extern from "cudf/column/column_view.hpp" namespace "cudf" nogil:
                     const bitmask_type* null_mask, size_type null_count,
                     size_type offset, vector[column_view] children)
         T* data[T]()
+        void* head()
         bitmask_type* null_mask()
         size_type size()
         data_type type()
@@ -80,6 +81,7 @@ cdef extern from "cudf/column/column_view.hpp" namespace "cudf" nogil:
         bool has_nulls()
         size_type offset()
         size_type num_children()
+        column_view child(size_type child_index)
 
     cdef cppclass mutable_column_view:
         mutable_column_view()
@@ -111,6 +113,7 @@ cdef extern from "cudf/column/column_view.hpp" namespace "cudf" nogil:
         bool has_nulls()
         size_type offset()
         size_type num_children()
+        column_view child(size_type child_index)
 
 cdef extern from "cudf/table/table_view.hpp" namespace "cudf" nogil:
     cdef cppclass table_view:
@@ -141,6 +144,10 @@ cdef extern from "cudf/copying.hpp" namespace "cudf::experimental" nogil:
     cdef unique_ptr[table] cpp_gather "cudf::experimental::gather" (
         table_view source_table,
         column_view gather_map
+    )
+    cdef vector[column_view] cpp_slice "cudf::experimental::slice" (
+        column_view input,
+        vector[size_type] indices
     )
 
 cdef extern from "cudf/null_mask.hpp" namespace "cudf" nogil:
