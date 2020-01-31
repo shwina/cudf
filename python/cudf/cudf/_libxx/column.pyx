@@ -266,7 +266,11 @@ cdef class Column:
 
         return build_column(data, dtype=dtype, mask=mask, children=children)
 
-    def slice(self, begin, end):
+    def slice(self, begin, end=None):
+        if end is None:
+            end = self.size
+        if begin == 0 and end == self.size:
+            return self
         cdef vector[size_type] indices = [begin, end]
         cdef column_view result = cpp_slice(
             self.view(),
@@ -301,10 +305,13 @@ cdef class Column:
             )
         children = tuple(children)
 
-        return build_column(
+        result = build_column(
             data,
             dtype,
             mask,
             offset,
             tuple(children)
         )
+        result.size = size
+
+        return result

@@ -465,7 +465,9 @@ class StringColumn(column.ColumnBase):
             # bytes in the data buffer
             size = children[0].size - 1
 
-        super().__init__(data, size, dtype, mask=mask, children=children)
+        super().__init__(
+            data, size, dtype, offset=offset, mask=mask, children=children
+        )
 
         self._nvstrings = None
         self._nvcategory = None
@@ -499,16 +501,19 @@ class StringColumn(column.ColumnBase):
     @property
     def nvstrings(self):
         if self._nvstrings is None:
+            offsets = self.children[1].slice(self.offset)
+            values = self.children[0]
+            mask = self.copy_mask(begin=self.offset)
             if self.nullable:
-                mask_ptr = self.mask.ptr
+                mask_ptr = mask.ptr
             else:
                 mask_ptr = None
             if self.size == 0:
                 self._nvstrings = nvstrings.to_device([])
             else:
                 self._nvstrings = nvstrings.from_offsets(
-                    self.children[1].data.ptr,
-                    self.children[0].data.ptr,
+                    offsets.data.ptr,
+                    values.data.ptr,
                     self.size,
                     mask_ptr,
                     ncount=self.null_count,
