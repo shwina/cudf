@@ -54,9 +54,11 @@ cdef class DomainHandle:
 
 cdef class RangeId:
     cdef nvtxRangeId_t c_obj
-
-    def __cinit__(self, uint64_t range_id):
+    cdef nvtxDomainHandle_t c_domain
+    
+    def __cinit__(self, uint64_t range_id, DomainHandle domain):
         self.c_obj = range_id
+        self.c_domain = domain.c_obj
 
 
 class Domain(metaclass=CachedInstanceMeta):
@@ -71,3 +73,14 @@ def push_range(EventAttributes attributes, DomainHandle domain):
 
 def pop_range(DomainHandle domain):
     nvtxDomainRangePop(domain.c_obj)
+
+def start_range(EventAttributes attributes, DomainHandle domain):
+    cdef RangeId rid = RangeId(
+        nvtxDomainRangeStartEx(domain.c_obj, &attributes.c_obj),
+        domain
+    )
+    return rid
+
+def end_range(RangeId rid):
+    nvtxDomainRangeEnd(rid.c_domain, rid.c_obj)
+    

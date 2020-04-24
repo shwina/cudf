@@ -7,6 +7,8 @@ from cudf._lib.nvtx._lib import (
     EventAttributes,
     pop_range as libnvtx_pop_range,
     push_range as libnvtx_push_range,
+    start_range as libnvtx_start_range,
+    end_range as libnvtx_end_range
 )
 
 
@@ -118,3 +120,10 @@ def pop_range(domain=None):
         domain is "NVTX".
     """
     libnvtx_pop_range(Domain(domain).handle)
+
+
+def start_range(message=None, color="blue", domain=None):
+    return libnvtx_start_range(EventAttributes(message, color), Domain(domain).handle)
+
+def end_range(range_id):
+    libnvtx_end_range(range_id)
