@@ -154,3 +154,8 @@ cdef extern from "cudf/copying.hpp" namespace "cudf" nogil:
         column_view input,
         size_type index
     ) except +
+
+    cdef unique_ptr[column] index_of(
+        const table_view & input,
+        const table_view & keys,
+    ) except +

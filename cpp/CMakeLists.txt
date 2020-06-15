@@ -480,6 +480,7 @@ add_library(cudf
             src/copying/contiguous_split.cu
             src/copying/copy_range.cu
             src/copying/get_element.cu
+            src/copying/index_of.cu
             src/filling/fill.cu
             src/filling/repeat.cu
             src/filling/sequence.cu

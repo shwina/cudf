@@ -656,3 +656,20 @@ def get_element(Column input_column, size_type index):
         )
 
     return Scalar.from_unique_ptr(move(c_output))
+
+
+def index_of(Table input_table, Table keys):
+    cdef unique_ptr[column] c_gather_map
+    cdef table_view input_view = input_table.data_view()
+    cdef table_view keys_view = keys.data_view()
+
+    with nogil:
+        c_gather_map = move(
+            cpp_copying.index_of(
+                input_view,
+                keys_view
+            )
+        )
+    return Column.from_unique_ptr(
+        move(c_gather_map)
+    )

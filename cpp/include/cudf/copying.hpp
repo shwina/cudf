@@ -717,5 +717,10 @@ std::unique_ptr<scalar> get_element(
   size_type index,
   rmm::mr::device_memory_resource* mr = rmm::mr::get_default_resource());
 
+std::unique_ptr<column> index_of(
+  table_view const& input,
+  table_view const& keys,
+  rmm::mr::device_memory_resource* mr = rmm::mr::get_default_resource());
+
 /** @} */
 }  // namespace cudf
