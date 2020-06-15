@@ -31,10 +31,6 @@ std::unique_ptr<column> index_of(
   rmm::mr::device_memory_resource* mr = rmm::mr::get_default_resource(),
   cudaStream_t stream                 = 0)
 {
-  auto indices = cudf::make_numeric_column(
-    data_type(type_to_id<size_type>()), keys.num_rows(), mask_state::UNALLOCATED, stream, mr);
-  mutable_column_view indices_view = indices.get()->mutable_view();
-
   rmm::device_vector<size_type> idx(input.num_rows());
   thrust::sequence(rmm::exec_policy(stream)->on(stream), idx.begin(), idx.end(), 0);
 
@@ -59,12 +55,16 @@ std::unique_ptr<column> index_of(
   auto d_idx_ptr = column_device_view::create(index_column, stream);
   auto d_idx     = *d_idx_ptr;
 
+  auto result = cudf::make_numeric_column(
+    data_type(type_to_id<size_type>()), keys.num_rows(), mask_state::UNALLOCATED, stream, mr);
+  auto d_result = result.get()->mutable_view();
+
   thrust::transform(rmm::exec_policy()->on(stream),
                     lb->view().begin<size_type>(),
                     lb->view().end<size_type>(),
-                    indices_view.begin<size_type>(),
+                    d_result.begin<size_type>(),
                     [d_idx] __device__(size_t index) { return d_idx.element<size_type>(index); });
-  return indices;
+  return result;
 }
 
 }  // namespace detail
