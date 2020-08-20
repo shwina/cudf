@@ -619,7 +619,7 @@ class Series(Frame, Serializable):
         idx = self._index if index is None else index
         return self.to_frame(name).reindex(idx, copy=copy)[name]
 
-    def reset_index(self, drop=False, inplace=False):
+    def reset_index(self, drop=False, inplace=False, names=None):
         """ Reset index to RangeIndex """
         if not drop:
             if inplace is True:
@@ -627,7 +627,7 @@ class Series(Frame, Serializable):
                     "Cannot reset_index inplace on a Series "
                     "to create a DataFrame"
                 )
-            return self.to_frame().reset_index(drop=drop)
+            return self.to_frame().reset_index(drop=drop, names=names)
         else:
             if inplace is True:
                 self._index = RangeIndex(len(self))
