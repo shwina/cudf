@@ -80,31 +80,67 @@ class Merge(object):
 
         self._left_index = self._right_index = False
 
-        # check that the merge is valid
-        if left_index:
-            self._left_index = True
+        if left_index and right_index:
             self._left_index_names = self.lhs.index.names
-            if isinstance(self.lhs.index, cudf.MultiIndex):
-                left_on = ["__index_" + i for i in self.lhs.index.names]
-            else:
-                left_on = [
-                    "__index_",
-                ]
-            lhs = self.lhs = self.lhs.reset_index(names=left_on)
-        if right_index:
-            self._right_index = True
             self._right_index_names = self.rhs.index.names
-            if isinstance(self.rhs.index, cudf.MultiIndex):
-                right_on = ["__index_" + i for i in self.rhs.index.names]
+
+            if isinstance(self.lhs.index, cudf.MultiIndex):
+                left_prefixed = ["__index_" + i for i in self.lhs.index.names]
             else:
-                right_on = [
+                left_prefixed = [
                     "__index_",
                 ]
-            rhs = self.rhs = self.rhs.reset_index(names=right_on)
+            if isinstance(self.rhs.index, cudf.MultiIndex):
+                right_prefixed = ["__index_" + i for i in self.rhs.index.names]
+            else:
+                right_prefixed = [
+                    "__index_",
+                ]
+
+            lhs = self.lhs = lhs.reset_index(names=left_prefixed)
+            rhs = self.rhs = rhs.reset_index(names=right_prefixed)
+
+            self._left_index = True
+            left_on = left_prefixed
+            self._right_index = True
+            right_on = right_prefixed
+
+        elif left_index or right_index:
+            self._left_index_names = self.lhs.index.names
+            self._right_index_names = self.rhs.index.names
+
+            if isinstance(self.lhs.index, cudf.MultiIndex):
+                left_prefixed = [
+                    "__left_index_" + i for i in self.lhs.index.names
+                ]
+            else:
+                left_prefixed = [
+                    "__left_index_",
+                ]
+            if isinstance(self.rhs.index, cudf.MultiIndex):
+                right_prefixed = [
+                    "__right_index_" + i for i in self.rhs.index.names
+                ]
+            else:
+                right_prefixed = [
+                    "__right_index_",
+                ]
+
+            lhs = self.lhs = lhs.reset_index(names=left_prefixed)
+            rhs = self.rhs = rhs.reset_index(names=right_prefixed)
+
+            if left_index:
+                self._left_index = True
+                left_on = left_prefixed
+
+            if right_index:
+                self._right_index = True
+                right_on = right_prefixed
 
         self.left_index = left_index = False
         self.right_index = right_index = False
 
+        # check that the merge is valid
         self.validate_merge_cfg(
             lhs,
             rhs,
@@ -145,7 +181,7 @@ class Merge(object):
         result = self.out_class._from_table(libcudf_result)
         result = self.typecast_libcudf_to_output(result, output_dtypes)
 
-        if self._left_index:
+        if self._left_index and self._right_index:
             self.lhs = self.lhs.set_index(
                 [
                     name
@@ -153,16 +189,8 @@ class Merge(object):
                     if name.startswith("__index_")
                 ]
             )
-            result = result.set_index(
-                [
-                    name
-                    for name in result._data.names
-                    if name.startswith("__index_")
-                ]
-            )
             self.lhs.index.names = self._left_index_names
-            result.index.names = self._left_index_names
-        if self._right_index:
+
             self.rhs = self.rhs.set_index(
                 [
                     name
@@ -171,6 +199,67 @@ class Merge(object):
                 ]
             )
             self.rhs.index.names = self._right_index_names
+
+            result = result.set_index(
+                [
+                    name
+                    for name in result._data.names
+                    if name.startswith("__index_")
+                ]
+            )
+            result.index.names = self._left_index_names
+
+        elif self._left_index or self._right_index:
+            self.lhs = self.lhs.set_index(
+                [
+                    name
+                    for name in self.lhs._data.names
+                    if name.startswith("__left_index_")
+                ]
+            )
+            self.lhs.index.names = self._left_index_names
+
+            self.rhs = self.rhs.set_index(
+                [
+                    name
+                    for name in self.rhs._data.names
+                    if name.startswith("__right_index_")
+                ]
+            )
+            self.rhs.index.names = self._right_index_names
+
+            if self._right_index:
+                result = result.set_index(
+                    [
+                        name
+                        for name in result._data.names
+                        if name.startswith("__left_index_")
+                    ]
+                )
+                result.index.names = self._left_index_names
+                result = result.drop(
+                    [
+                        name
+                        for name in result._data.names
+                        if name.startswith("__right_index_")
+                    ]
+                )
+            else:
+                result = result.set_index(
+                    [
+                        name
+                        for name in result._data.names
+                        if name.startswith("__right_index_")
+                    ]
+                )
+                result.index.names = self._left_index_names
+                result = result.drop(
+                    [
+                        name
+                        for name in result._data.names
+                        if name.startswith("__left_index_")
+                    ]
+                )
 
         if isinstance(result, cudf.Index):
             return result
@@ -575,16 +664,10 @@ class Merge(object):
         return output
 
     def _build_output_col(self, col, dtype):
-
         if isinstance(
             dtype, (cudf.core.dtypes.CategoricalDtype, pd.CategoricalDtype)
         ):
-            outcol = cudf.core.column.build_categorical_column(
-                categories=dtype.categories,
-                codes=col.set_mask(None),
-                mask=col.base_mask,
-                ordered=dtype.ordered,
-            )
+            outcol = col.astype(dtype)
         else:
             outcol = col.astype(dtype)
         return outcol
