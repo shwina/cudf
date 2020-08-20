@@ -2668,7 +2668,13 @@ class DataFrame(Frame, Serializable):
             return df
 
     def reset_index(
-        self, level=None, drop=False, inplace=False, col_level=0, col_fill=""
+        self,
+        level=None,
+        drop=False,
+        inplace=False,
+        col_level=0,
+        col_fill="",
+        names=None,
     ):
         """
         Reset the index.
@@ -2734,13 +2740,13 @@ class DataFrame(Frame, Serializable):
             result = self.copy()
         if all(name is None for name in self.index.names):
             if isinstance(self.index, cudf.MultiIndex):
-                names = tuple(
+                names = names or tuple(
                     f"level_{i}" for i, _ in enumerate(self.index.names)
                 )
             else:
-                names = ("index",)
+                names = names or (None,)
         else:
-            names = self.index.names
+            names = names or self.index.names
 
         if not drop:
             index_columns = self.index._data.columns

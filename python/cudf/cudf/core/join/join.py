@@ -78,7 +78,32 @@ class Merge(object):
         self.method = method
         self.sort = sort
 
+        self._left_index = self._right_index = False
+
         # check that the merge is valid
+        if left_index:
+            self._left_index = True
+            self._left_index_names = self.lhs.index.names
+            if isinstance(self.lhs.index, cudf.MultiIndex):
+                left_on = ["__index_" + i for i in self.lhs.index.names]
+            else:
+                left_on = [
+                    "__index_",
+                ]
+            lhs = self.lhs = self.lhs.reset_index(names=left_on)
+        if right_index:
+            self._right_index = True
+            self._right_index_names = self.rhs.index.names
+            if isinstance(self.rhs.index, cudf.MultiIndex):
+                right_on = ["__index_" + i for i in self.rhs.index.names]
+            else:
+                right_on = [
+                    "__index_",
+                ]
+            rhs = self.rhs = self.rhs.reset_index(names=right_on)
+
+        self.left_index = left_index = False
+        self.right_index = right_index = False
 
         self.validate_merge_cfg(
             lhs,
@@ -106,6 +131,7 @@ class Merge(object):
         """
         output_dtypes = self.compute_output_dtypes()
         self.typecast_input_to_libcudf()
+
         libcudf_result = libcudf.join.join(
             self.lhs,
             self.rhs,
@@ -118,6 +144,34 @@ class Merge(object):
         )
         result = self.out_class._from_table(libcudf_result)
         result = self.typecast_libcudf_to_output(result, output_dtypes)
+
+        if self._left_index:
+            self.lhs = self.lhs.set_index(
+                [
+                    name
+                    for name in self.lhs._data.names
+                    if name.startswith("__index_")
+                ]
+            )
+            result = result.set_index(
+                [
+                    name
+                    for name in result._data.names
+                    if name.startswith("__index_")
+                ]
+            )
+            self.lhs.index.names = self._left_index_names
+            result.index.names = self._left_index_names
+        if self._right_index:
+            self.rhs = self.rhs.set_index(
+                [
+                    name
+                    for name in self.rhs._data.names
+                    if name.startswith("__index_")
+                ]
+            )
+            self.rhs.index.names = self._right_index_names
+
         if isinstance(result, cudf.Index):
             return result
         else:
