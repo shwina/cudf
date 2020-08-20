@@ -78,6 +78,21 @@ class Merge(object):
         self.method = method
         self.sort = sort
 
+        # check that the merge is valid
+        self.validate_merge_cfg(
+            lhs,
+            rhs,
+            on,
+            left_on,
+            right_on,
+            left_index,
+            right_index,
+            how,
+            lsuffix,
+            rsuffix,
+            suffixes,
+        )
+
         self._left_index = self._right_index = False
 
         if left_index and right_index:
@@ -140,20 +155,6 @@ class Merge(object):
         self.left_index = left_index = False
         self.right_index = right_index = False
 
-        # check that the merge is valid
-        self.validate_merge_cfg(
-            lhs,
-            rhs,
-            on,
-            left_on,
-            right_on,
-            left_index,
-            right_index,
-            how,
-            lsuffix,
-            rsuffix,
-            suffixes,
-        )
         self.how = how
         self.preprocess_merge_params(
             on, left_on, right_on, lsuffix, rsuffix, suffixes
