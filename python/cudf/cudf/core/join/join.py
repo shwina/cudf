@@ -252,7 +252,7 @@ class Merge(object):
                         if str(name).startswith("__right_index_")
                     ]
                 )
-                result.index.names = self._left_index_names
+                result.index.names = self._right_index_names
                 result = result.drop(
                     [
                         name
