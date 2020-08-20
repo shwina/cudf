@@ -186,7 +186,7 @@ class Merge(object):
                 [
                     name
                     for name in self.lhs._data.names
-                    if name.startswith("__index_")
+                    if str(name).startswith("__index_")
                 ]
             )
             self.lhs.index.names = self._left_index_names
@@ -195,7 +195,7 @@ class Merge(object):
                 [
                     name
                     for name in self.rhs._data.names
-                    if name.startswith("__index_")
+                    if str(name).startswith("__index_")
                 ]
             )
             self.rhs.index.names = self._right_index_names
@@ -204,7 +204,7 @@ class Merge(object):
                 [
                     name
                     for name in result._data.names
-                    if name.startswith("__index_")
+                    if str(name).startswith("__index_")
                 ]
             )
             result.index.names = self._left_index_names
@@ -214,7 +214,7 @@ class Merge(object):
                 [
                     name
                     for name in self.lhs._data.names
-                    if name.startswith("__left_index_")
+                    if str(name).startswith("__left_index_")
                 ]
             )
             self.lhs.index.names = self._left_index_names
@@ -223,7 +223,7 @@ class Merge(object):
                 [
                     name
                     for name in self.rhs._data.names
-                    if name.startswith("__right_index_")
+                    if str(name).startswith("__right_index_")
                 ]
             )
             self.rhs.index.names = self._right_index_names
@@ -233,7 +233,7 @@ class Merge(object):
                     [
                         name
                         for name in result._data.names
-                        if name.startswith("__left_index_")
+                        if str(name).startswith("__left_index_")
                     ]
                 )
                 result.index.names = self._left_index_names
@@ -241,7 +241,7 @@ class Merge(object):
                     [
                         name
                         for name in result._data.names
-                        if name.startswith("__right_index_")
+                        if str(name).startswith("__right_index_")
                     ]
                 )
             else:
@@ -249,7 +249,7 @@ class Merge(object):
                     [
                         name
                         for name in result._data.names
-                        if name.startswith("__right_index_")
+                        if str(name).startswith("__right_index_")
                     ]
                 )
                 result.index.names = self._left_index_names
@@ -257,7 +257,7 @@ class Merge(object):
                     [
                         name
                         for name in result._data.names
-                        if name.startswith("__left_index_")
+                        if str(name).startswith("__left_index_")
                     ]
                 )
 
@@ -589,7 +589,6 @@ class Merge(object):
         of a libcudf join, baesd on the original left and right
         frames.
         """
-
         index_dtypes = {}
         l_data_join_cols = {}
         r_data_join_cols = {}
@@ -655,6 +654,7 @@ class Merge(object):
                     output._index._data[
                         index_col_lbl
                     ] = self._build_output_col(index_col, index_dtype)
+
         for data_col_lbl, data_col in output._data.items():
             data_dtype = data_dtypes[data_col_lbl]
             if data_dtype:
@@ -667,7 +667,12 @@ class Merge(object):
         if isinstance(
             dtype, (cudf.core.dtypes.CategoricalDtype, pd.CategoricalDtype)
         ):
-            outcol = col.astype(dtype)
+            outcol = cudf.core.column.build_categorical_column(
+                categories=dtype.categories,
+                codes=col.set_mask(None),
+                mask=col.base_mask,
+                ordered=dtype.ordered,
+            )
         else:
             outcol = col.astype(dtype)
         return outcol

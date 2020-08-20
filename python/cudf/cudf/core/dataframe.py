@@ -2744,7 +2744,7 @@ class DataFrame(Frame, Serializable):
                     f"level_{i}" for i, _ in enumerate(self.index.names)
                 )
             else:
-                names = names or (None,)
+                names = names or ("index",)
         else:
             names = names or self.index.names
 

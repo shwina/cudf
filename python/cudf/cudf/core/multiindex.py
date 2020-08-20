@@ -9,11 +9,10 @@ import numpy as np
 import pandas as pd
 
 import cudf
+from cudf import _lib as libcudf
 from cudf.core.column import column
 from cudf.core.frame import Frame
 from cudf.core.index import Index, as_index
-
-import cudf._lib as libcudf
 
 
 class MultiIndex(Index):
@@ -188,6 +187,10 @@ class MultiIndex(Index):
     def names(self, value):
         value = [None] * self.nlevels if value is None else value
         assert len(value) == self.nlevels
+        if len(dict.fromkeys(value)) == len(value):
+            self._data = self._data.__class__(
+                {k: v for k, v in zip(value, self._data.values())}
+            )
         self._names = pd.core.indexes.frozen.FrozenList(value)
 
     @classmethod
