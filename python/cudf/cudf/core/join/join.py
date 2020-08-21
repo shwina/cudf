@@ -73,10 +73,10 @@ class Merge(object):
         """
         self.lhs = lhs
         self.rhs = rhs
-        self.left_index = left_index
-        self.right_index = right_index
         self.method = method
         self.sort = sort
+        self.left_index = left_index
+        self.right_index = right_index
 
         # check that the merge is valid
         self.validate_merge_cfg(
@@ -92,8 +92,6 @@ class Merge(object):
             rsuffix,
             suffixes,
         )
-
-        self._left_index = self._right_index = False
 
         if left_index and right_index:
             self._left_index_names = self.lhs.index.names
@@ -114,10 +112,7 @@ class Merge(object):
 
             lhs = self.lhs = lhs.reset_index(names=left_prefixed)
             rhs = self.rhs = rhs.reset_index(names=right_prefixed)
-
-            self._left_index = True
             left_on = left_prefixed
-            self._right_index = True
             right_on = right_prefixed
 
         elif left_index or right_index:
@@ -145,15 +140,10 @@ class Merge(object):
             rhs = self.rhs = rhs.reset_index(names=right_prefixed)
 
             if left_index:
-                self._left_index = True
                 left_on = left_prefixed
 
             if right_index:
-                self._right_index = True
                 right_on = right_prefixed
-
-        self.left_index = left_index = False
-        self.right_index = right_index = False
 
         self.how = how
         self.preprocess_merge_params(
@@ -176,13 +166,11 @@ class Merge(object):
             self.method,
             left_on=self.left_on,
             right_on=self.right_on,
-            left_index=self.left_index,
-            right_index=self.right_index,
         )
         result = self.out_class._from_table(libcudf_result)
         result = self.typecast_libcudf_to_output(result, output_dtypes)
 
-        if self._left_index and self._right_index:
+        if self.left_index and self.right_index:
             self.lhs = self.lhs.set_index(
                 [
                     name
@@ -210,7 +198,7 @@ class Merge(object):
             )
             result.index.names = self._left_index_names
 
-        elif self._left_index or self._right_index:
+        elif self.left_index or self.right_index:
             self.lhs = self.lhs.set_index(
                 [
                     name
@@ -229,7 +217,7 @@ class Merge(object):
             )
             self.rhs.index.names = self._right_index_names
 
-            if self._right_index:
+            if self.right_index:
                 result = result.set_index(
                     [
                         name
@@ -302,9 +290,7 @@ class Merge(object):
         same_named_columns = set(self.lhs._data.keys()) & set(
             self.rhs._data.keys()
         )
-        if not (left_on or right_on) and not (
-            self.left_index and self.right_index
-        ):
+        if not (left_on or right_on):
             left_on = right_on = list(same_named_columns)
 
         no_suffix_cols = []
@@ -447,12 +433,6 @@ class Merge(object):
         before passing the result to libcudf.
         """
         lhs_keys, rhs_keys, lhs_cols, rhs_cols = [], [], [], []
-        if self.left_index:
-            lhs_keys.append(self.lhs.index._data.keys())
-            lhs_cols.append(self.lhs.index)
-        if self.right_index:
-            rhs_keys.append(self.rhs.index._data.keys())
-            rhs_cols.append(self.rhs.index)
         if self.left_on:
             lhs_keys.append(self.left_on)
             lhs_cols.append(self.lhs)
@@ -601,35 +581,9 @@ class Merge(object):
             )
         }
 
-        if self.left_index and self.right_index:
-            l_idx_join_cols = list(self.lhs.index._data.values())
-            r_idx_join_cols = list(self.rhs.index._data.values())
-        elif self.left_on and self.right_index:
-            # Keep the orignal dtypes in the LEFT index if possible
-            # should trigger a bunch of no-ops
-            l_idx_join_cols = list(self.lhs.index._data.values())
-            r_idx_join_cols = list(self.lhs.index._data.values())
-            for i, name in enumerate(self.left_on):
-                l_data_join_cols[name] = self.lhs._data[name]
-                r_data_join_cols[name] = list(self.rhs.index._data.values())[i]
-
-        elif self.left_index and self.right_on:
-            # see above
-            l_idx_join_cols = list(self.rhs.index._data.values())
-            r_idx_join_cols = list(self.rhs.index._data.values())
-            for i, name in enumerate(self.right_on):
-                l_data_join_cols[name] = list(self.lhs.index._data.values())[i]
-                r_data_join_cols[name] = self.rhs._data[name]
-
         if self.left_on and self.right_on:
             l_data_join_cols = self.lhs._data
             r_data_join_cols = self.rhs._data
-
-        if self.left_index or self.right_index:
-            for i in range(len(self.lhs.index._data.items())):
-                index_dtypes[i] = self.libcudf_to_output_casting_rules(
-                    l_idx_join_cols[i], r_idx_join_cols[i], self.how
-                )
 
         for name in itertools.chain(self.left_on, self.right_on):
             if name in self.left_on and name in self.right_on:
