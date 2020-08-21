@@ -8,7 +8,6 @@ import pandas as pd
 
 import cudf
 from cudf import _lib as libcudf
-from cudf._lib.join import compute_result_col_names
 from cudf.core.dtypes import CategoricalDtype
 
 
@@ -190,6 +189,10 @@ class Merge(object):
             columns_in_common,
         ) = self.compute_join_indices()
 
+        result_column_names = compute_result_col_names(
+            self.lhs._data.names, self.rhs._data.names, self.how
+        )
+
         libcudf_result = libcudf.join.join(
             self.lhs,
             self.rhs,
@@ -197,6 +200,7 @@ class Merge(object):
             left_on_ind,
             right_on_ind,
             columns_in_common,
+            result_column_names,
         )
         result = self.out_class._from_table(libcudf_result)
         result = self.typecast_libcudf_to_output(result, output_dtypes)
@@ -257,13 +261,6 @@ class Merge(object):
                     ]
                 )
                 result.index.names = self._left_index_names
-                result = result.drop(
-                    [
-                        name
-                        for name in result._data.names
-                        if str(name).startswith("__right_index_")
-                    ]
-                )
             else:
                 result = result.set_index(
                     [
@@ -273,19 +270,15 @@ class Merge(object):
                     ]
                 )
                 result.index.names = self._right_index_names
-                result = result.drop(
-                    [
-                        name
-                        for name in result._data.names
-                        if str(name).startswith("__left_index_")
-                    ]
-                )
 
+        # breakpoint()
         if isinstance(result, cudf.Index):
             return result
         else:
             return result[
-                compute_result_col_names(self.lhs, self.rhs, self.how)
+                compute_result_col_names(
+                    self.lhs._data.names, self.rhs._data.names, self.how
+                )
             ]
 
     def preprocess_merge_params(
@@ -662,3 +655,27 @@ class Merge(object):
         else:
             outcol = col.astype(dtype)
         return outcol
+
+
+def compute_result_col_names(left_suffixed_names, right_suffixed_names, how):
+    """
+    Determine the names of the data columns in the result of
+    a libcudf join, based on the original left and right frames
+    as well as the type of join that was performed.
+    """
+    if how in {"left", "inner", "outer", "leftsemi", "leftanti"}:
+        a = left_suffixed_names
+        if how not in {"leftsemi", "leftanti"}:
+            return list(
+                itertools.chain(
+                    a,
+                    (
+                        k
+                        for k in right_suffixed_names
+                        if k not in left_suffixed_names
+                    ),
+                )
+            )
+        return list(a)
+    else:
+        raise NotImplementedError(f"{how} merge not supported yet")
