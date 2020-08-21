@@ -189,9 +189,7 @@ class Merge(object):
             columns_in_common,
         ) = self.compute_join_indices()
 
-        result_column_names = compute_result_col_names(
-            self.lhs._data.names, self.rhs._data.names, self.how
-        )
+        result_column_names = self.compute_result_col_names()
 
         libcudf_result = libcudf.join.join(
             self.lhs,
@@ -275,11 +273,7 @@ class Merge(object):
         if isinstance(result, cudf.Index):
             return result
         else:
-            return result[
-                compute_result_col_names(
-                    self.lhs._data.names, self.rhs._data.names, self.how
-                )
-            ]
+            return result[self.compute_result_col_names()]
 
     def preprocess_merge_params(
         self, on, left_on, right_on, lsuffix, rsuffix, suffixes
@@ -656,26 +650,25 @@ class Merge(object):
             outcol = col.astype(dtype)
         return outcol
 
-
-def compute_result_col_names(left_suffixed_names, right_suffixed_names, how):
-    """
-    Determine the names of the data columns in the result of
-    a libcudf join, based on the original left and right frames
-    as well as the type of join that was performed.
-    """
-    if how in {"left", "inner", "outer", "leftsemi", "leftanti"}:
-        a = left_suffixed_names
-        if how not in {"leftsemi", "leftanti"}:
-            return list(
-                itertools.chain(
-                    a,
-                    (
-                        k
-                        for k in right_suffixed_names
-                        if k not in left_suffixed_names
-                    ),
+    def compute_result_col_names(self):
+        """
+        Determine the names of the data columns in the result of
+        a libcudf join, based on the original left and right frames
+        as well as the type of join that was performed.
+        """
+        if self.how in {"left", "inner", "outer", "leftsemi", "leftanti"}:
+            a = self.lhs._data.keys()
+            if self.how not in {"leftsemi", "leftanti"}:
+                return list(
+                    itertools.chain(
+                        a,
+                        (
+                            k
+                            for k in self.rhs._data.keys()
+                            if k not in self.lhs._data.keys()
+                        ),
+                    )
                 )
-            )
-        return list(a)
-    else:
-        raise NotImplementedError(f"{how} merge not supported yet")
+            return list(a)
+        else:
+            raise NotImplementedError(f"{self.how} merge not supported yet")
