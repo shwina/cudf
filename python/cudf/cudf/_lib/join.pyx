@@ -15,28 +15,21 @@ from cudf._lib.cpp.table.table cimport table
 from cudf._lib.cpp.table.table_view cimport table_view
 cimport cudf._lib.cpp.join as cpp_join
 
-cpdef join(Table lhs,
-           Table rhs,
-           object how,
-           object method,
-           object left_on=None,
-           object right_on=None,
-           ):
+
+cpdef join(
+    Table lhs,
+    Table rhs,
+    object how,
+    vector[int] left_on_ind,
+    vector[int] right_on_ind,
+    vector[pair[int, int]] columns_in_common,
+):
     """
     Call libcudf++ join for full outer, inner and left joins.
     """
-    cdef Table c_lhs = lhs
-    cdef Table c_rhs = rhs
-
     # Views might or might not include index
-    cdef table_view lhs_view
-    cdef table_view rhs_view
-
-    # Will hold the join column indices into L and R tables
-    cdef vector[int] left_on_ind
-    cdef vector[int] right_on_ind
-    left_on_ind.reserve(len(left_on))
-    right_on_ind.reserve(len(right_on))
+    cdef table_view lhs_view = lhs.data_view()
+    cdef table_view rhs_view = rhs.data_view()
 
     # Only used for semi or anti joins
     # The result columns are only the left hand columns
@@ -49,30 +42,6 @@ cpdef join(Table lhs,
 
     result_col_names = compute_result_col_names(lhs, rhs, how)
 
-    columns_in_common = OrderedDict()
-    cdef vector[pair[int, int]] c_columns_in_common
-
-    # cuDF's Python layer will create a new RangeIndex for this case
-    lhs_view = c_lhs.data_view()
-    rhs_view = c_rhs.data_view()
-
-    left_join_cols = list(lhs._data.keys())
-    right_join_cols = list(rhs._data.keys())
-
-    # If both left/right_index, joining on indices plus additional cols
-    # If neither, joining on just cols, not indices
-    # In both cases, must match up additional column indices in lhs/rhs
-    for name in left_on:
-        left_on_ind.push_back(left_join_cols.index(name))
-        if name in right_on:
-            if (left_on.index(name) == right_on.index(name)):
-                columns_in_common[(
-                    left_join_cols.index(name),
-                    right_join_cols.index(name)
-                )] = None
-    for name in right_on:
-        right_on_ind.push_back(right_join_cols.index(name))
-    c_columns_in_common = list(columns_in_common.keys())
     cdef unique_ptr[table] c_result
     if how == 'inner':
         with nogil:
@@ -81,7 +50,7 @@ cpdef join(Table lhs,
                 rhs_view,
                 left_on_ind,
                 right_on_ind,
-                c_columns_in_common
+                columns_in_common
             ))
     elif how == 'left':
         with nogil:
@@ -90,7 +59,7 @@ cpdef join(Table lhs,
                 rhs_view,
                 left_on_ind,
                 right_on_ind,
-                c_columns_in_common
+                columns_in_common
             ))
     elif how == 'outer':
         with nogil:
@@ -99,7 +68,7 @@ cpdef join(Table lhs,
                 rhs_view,
                 left_on_ind,
                 right_on_ind,
-                c_columns_in_common
+                columns_in_common
             ))
     elif how == 'leftsemi':
         with nogil:
@@ -122,7 +91,7 @@ cpdef join(Table lhs,
 
     all_cols_py = columns_from_ptr(move(c_result))
     data_ordered_dict = OrderedDict(zip(result_col_names, all_cols_py))
-    return Table(data=data_ordered_dict, index=NNone)
+    return Table(data=data_ordered_dict, index=None)
 
 
 def compute_result_col_names(lhs, rhs, how):

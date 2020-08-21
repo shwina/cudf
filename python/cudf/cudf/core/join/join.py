@@ -1,6 +1,7 @@
 # Copyright (c) 2020, NVIDIA CORPORATION.
 import itertools
 import warnings
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -150,6 +151,31 @@ class Merge(object):
             on, left_on, right_on, lsuffix, rsuffix, suffixes
         )
 
+    def compute_join_indices(self):
+        columns_in_common = OrderedDict()
+        left_on_ind = []
+        right_on_ind = []
+        left_join_cols = list(self.lhs._data.keys())
+        right_join_cols = list(self.rhs._data.keys())
+
+        # If both left/right_index, joining on indices plus additional cols
+        # If neither, joining on just cols, not indices
+        # In both cases, must match up additional column indices in lhs/rhs
+        for name in self.left_on:
+            left_on_ind.append(left_join_cols.index(name))
+            if name in self.right_on:
+                if self.left_on.index(name) == self.right_on.index(name):
+                    columns_in_common[
+                        (
+                            left_join_cols.index(name),
+                            right_join_cols.index(name),
+                        )
+                    ] = None
+        for name in self.right_on:
+            right_on_ind.append(right_join_cols.index(name))
+        columns_in_common = list(columns_in_common.keys())
+        return left_on_ind, right_on_ind, columns_in_common
+
     def perform_merge(self):
         """
         Call libcudf to perform a merge between the operands. If
@@ -158,14 +184,19 @@ class Merge(object):
         """
         output_dtypes = self.compute_output_dtypes()
         self.typecast_input_to_libcudf()
+        (
+            left_on_ind,
+            right_on_ind,
+            columns_in_common,
+        ) = self.compute_join_indices()
 
         libcudf_result = libcudf.join.join(
             self.lhs,
             self.rhs,
             self.how,
-            self.method,
-            left_on=self.left_on,
-            right_on=self.right_on,
+            left_on_ind,
+            right_on_ind,
+            columns_in_common,
         )
         result = self.out_class._from_table(libcudf_result)
         result = self.typecast_libcudf_to_output(result, output_dtypes)
