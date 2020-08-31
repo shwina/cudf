@@ -1,13 +1,13 @@
 # Copyright (c) 2020, NVIDIA CORPORATION.
 import itertools
 import warnings
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
 
 import cudf
 from cudf import _lib as libcudf
-from cudf._lib.join import compute_result_col_names
 from cudf.core.dtypes import CategoricalDtype
 
 
@@ -106,17 +106,55 @@ class Merge(object):
         """
         output_dtypes = self.compute_output_dtypes()
         self.typecast_input_to_libcudf()
-        libcudf_result = libcudf.join.join(
-            self.lhs,
-            self.rhs,
+
+        (
+            left_on_inds,
+            right_on_inds,
+            columns_in_common,
+            all_left_inds,
+            result_idx_positions,
+            result_col_names,
+            result_index_names,
+        ) = self.compute_join_indices()
+
+        if self.left_index or self.right_index:
+            lhs = self.lhs.reset_index()
+            rhs = self.rhs.reset_index()
+        else:
+            lhs = self.lhs
+            rhs = self.rhs
+
+        result = libcudf.join.join(
+            lhs,
+            rhs,
             self.how,
             self.method,
-            left_on=self.left_on,
-            right_on=self.right_on,
-            left_index=self.left_index,
-            right_index=self.right_index,
+            left_on_inds,
+            right_on_inds,
+            columns_in_common,
+            all_left_inds,
         )
-        result = self.out_class._from_table(libcudf_result)
+
+        if self.left_index or self.right_index:
+            ind_cols = OrderedDict()
+            for name, pos in zip(
+                result_index_names[::-1], result_idx_positions[::-1]
+            ):
+                ind_cols[name] = result._data.pop(pos)
+            index = OrderedDict()
+            for k, v in reversed(ind_cols.items()):
+                index[k] = v
+            index = cudf.core.frame.Frame(index)
+        else:
+            index = None
+
+        data = {
+            key: value
+            for key, value in zip(result_col_names, result._data.values())
+        }
+
+        result = cudf.core.frame.Frame(data=data, index=index)
+        result = self.out_class._from_table(result)
         result = self.typecast_libcudf_to_output(result, output_dtypes)
         if isinstance(result, cudf.Index):
             return result
@@ -534,3 +572,130 @@ class Merge(object):
         else:
             outcol = col.astype(dtype)
         return outcol
+
+    def compute_join_indices(self):
+        left_on_ind = []
+        right_on_ind = []
+        columns_in_common = OrderedDict()
+        result_idx_positions = []
+        result_index_names = []
+
+        result_col_names = compute_result_col_names(
+            self.lhs, self.rhs, self.how
+        )
+
+        all_left_inds = range(
+            self.lhs._num_columns + (self.lhs._num_indices * self.left_index)
+        )
+
+        # keep track of where the desired index column will end up
+        if self.left_index or self.right_index:
+            left_join_cols = list(self.lhs._index_names) + list(
+                self.lhs._data.keys()
+            )
+            right_join_cols = list(self.rhs._index_names) + list(
+                self.rhs._data.keys()
+            )
+            if self.left_index and self.right_index:
+                # Index columns will be common, on the left, dropped from right
+                # Index name is from the left
+                # Both views, must take index column indices
+                left_on_indices = right_on_indices = range(
+                    self.lhs._num_indices
+                )
+                result_idx_positions = range(self.lhs._num_indices)
+                result_index_names = self.lhs._index_names
+
+            elif self.left_index:
+                # Joins left index columns with right 'on' columns
+                left_on_indices = range(self.lhs._num_indices)
+                right_on_indices = [
+                    right_join_cols.index(on_col) for on_col in self.right_on
+                ]
+
+                # The left index columns 'become' the new RHS columns
+                # and the right index 'survives'
+                result_idx_positions = range(
+                    len(left_join_cols),
+                    len(left_join_cols) + self.lhs._num_indices,
+                )
+                result_index_names = self.rhs._index_names
+
+                # but since the common columns are gathered from the left
+                # the rhs 'on' cols are returned on the left of the result
+                # rearrange the names so account for this
+                common = [None] * self.rhs._num_indices
+                for i in range(self.rhs._num_indices):
+                    common[i] = result_col_names.pop(
+                        result_col_names.index(self.right_on[i])
+                    )
+                result_col_names = common + result_col_names
+            elif self.right_index:
+                # Joins right index columns with left 'on' columns
+                right_on_indices = range(self.rhs._num_indices)
+                left_on_indices = [
+                    left_join_cols.index(on_col) for on_col in self.left_on
+                ]
+
+                # The right index columns 'become' the new LHS columns
+                # and the left index survives
+                # since they are already gathered from the left,
+                # no rearranging has to be done
+                result_idx_positions = range(self.lhs._num_indices)
+                result_index_names = self.lhs._index_names
+            for i_l, i_r in zip(left_on_indices, right_on_indices):
+                left_on_ind.append(i_l)
+                right_on_ind.append(i_r)
+                columns_in_common[(i_l, i_r)] = None
+        else:
+            left_join_cols = list(self.lhs._data.keys())
+            right_join_cols = list(self.rhs._data.keys())
+
+        # If both left/right_index, joining on indices plus additional cols
+        # If neither, joining on just cols, not indices
+        # In both cases, must match up additional column indices in lhs/rhs
+        if self.left_index == self.right_index:
+            for name in self.left_on:
+                left_on_ind.append(left_join_cols.index(name))
+                if name in self.right_on:
+                    if self.left_on.index(name) == self.right_on.index(name):
+                        columns_in_common[
+                            (
+                                left_join_cols.index(name),
+                                right_join_cols.index(name),
+                            )
+                        ] = None
+            for name in self.right_on:
+                right_on_ind.append(right_join_cols.index(name))
+
+        columns_in_common = list(columns_in_common.keys())
+
+        return (
+            left_on_ind,
+            right_on_ind,
+            columns_in_common,
+            all_left_inds,
+            result_idx_positions,
+            result_col_names,
+            result_index_names,
+        )
+
+
+def compute_result_col_names(lhs, rhs, how):
+    """
+    Determine the names of the data columns in the result of
+    a libcudf join, based on the original left and right frames
+    as well as the type of join that was performed.
+    """
+    if how in {"left", "inner", "outer", "leftsemi", "leftanti"}:
+        a = lhs._data.keys()
+        if how not in {"leftsemi", "leftanti"}:
+            return list(
+                itertools.chain(
+                    a,
+                    (k for k in rhs._data.keys() if k not in lhs._data.keys()),
+                )
+            )
+        return list(a)
+    else:
+        raise NotImplementedError(f"{how} merge not supported yet")
