@@ -104,8 +104,9 @@ class Merge(object):
         necessary, cast the input key columns to compatible types.
         Potentially also cast the output back to categorical.
         """
-        output_dtypes = self.compute_output_dtypes()
-        self.typecast_input_to_libcudf()
+        result_col_order = compute_result_col_names(
+            self.lhs, self.rhs, self.how
+        )
 
         (
             left_on_inds,
@@ -118,15 +119,14 @@ class Merge(object):
         ) = self.compute_join_indices()
 
         if self.left_index or self.right_index:
-            lhs = self.lhs.reset_index()
-            rhs = self.rhs.reset_index()
-        else:
-            lhs = self.lhs
-            rhs = self.rhs
+            self.lhs = self.lhs.reset_index()
+            self.rhs = self.rhs.reset_index()
 
+        output_dtypes = self.compute_output_dtypes(columns_in_common)
+        self.typecast_input_to_libcudf(left_on_inds, right_on_inds)
         result = libcudf.join.join(
-            lhs,
-            rhs,
+            self.lhs,
+            self.rhs,
             self.how,
             self.method,
             left_on_inds,
@@ -134,6 +134,7 @@ class Merge(object):
             columns_in_common,
             all_left_inds,
         )
+        result = self.typecast_libcudf_to_output(result, output_dtypes)
 
         if self.left_index or self.right_index:
             ind_cols = OrderedDict()
@@ -155,13 +156,11 @@ class Merge(object):
 
         result = cudf.core.frame.Frame(data=data, index=index)
         result = self.out_class._from_table(result)
-        result = self.typecast_libcudf_to_output(result, output_dtypes)
+
         if isinstance(result, cudf.Index):
             return result
         else:
-            return result[
-                compute_result_col_names(self.lhs, self.rhs, self.how)
-            ]
+            return result[result_col_order]
 
     def preprocess_merge_params(
         self, on, left_on, right_on, lsuffix, rsuffix, suffixes
@@ -334,39 +333,27 @@ class Merge(object):
                         "lsuffix and rsuffix are not defined"
                     )
 
-    def typecast_input_to_libcudf(self):
+    def typecast_input_to_libcudf(self, left_on_ind, right_on_ind):
         """
         Check each pair of join keys in the left and right hand
         operands and apply casting rules to match their types
         before passing the result to libcudf.
         """
-        lhs_keys, rhs_keys, lhs_cols, rhs_cols = [], [], [], []
-        if self.left_index:
-            lhs_keys.append(self.lhs.index._data.keys())
-            lhs_cols.append(self.lhs.index)
-        if self.right_index:
-            rhs_keys.append(self.rhs.index._data.keys())
-            rhs_cols.append(self.rhs.index)
-        if self.left_on:
-            lhs_keys.append(self.left_on)
-            lhs_cols.append(self.lhs)
-        if self.right_on:
-            rhs_keys.append(self.right_on)
-            rhs_cols.append(self.rhs)
+        left_columns = self.lhs._data.columns
+        right_columns = self.rhs._data.columns
 
-        for l_key_grp, r_key_grp, l_col_grp, r_col_grp in zip(
-            lhs_keys, rhs_keys, lhs_cols, rhs_cols
-        ):
-            for l_key, r_key in zip(l_key_grp, r_key_grp):
-                to_dtype = self.input_to_libcudf_casting_rules(
-                    l_col_grp._data[l_key], r_col_grp._data[r_key], self.how
-                )
-                l_col_grp._data[l_key] = l_col_grp._data[l_key].astype(
-                    to_dtype
-                )
-                r_col_grp._data[r_key] = r_col_grp._data[r_key].astype(
-                    to_dtype
-                )
+        for (left_on_index, right_on_index) in zip(left_on_ind, right_on_ind):
+            to_dtype = self.input_to_libcudf_casting_rules(
+                left_columns[left_on_index],
+                right_columns[right_on_index],
+                self.how,
+            )
+            self.lhs._data[self.lhs._data.names[left_on_index]] = left_columns[
+                left_on_index
+            ].astype(to_dtype)
+            self.rhs._data[
+                self.rhs._data.names[right_on_index]
+            ] = right_columns[right_on_index].astype(to_dtype)
 
     def input_to_libcudf_casting_rules(self, lcol, rcol, how):
         """
@@ -453,7 +440,6 @@ class Merge(object):
         cast to after it has been processed by libcudf. Determine
         if a column should be promoted to a categorical datatype.
         """
-
         dtype_l = lcol.dtype
         dtype_r = rcol.dtype
 
@@ -478,78 +464,41 @@ class Merge(object):
                 merge_return_type = "category"
         return merge_return_type
 
-    def compute_output_dtypes(self):
+    def compute_output_dtypes(self, columns_in_common):
         """
         Determine what datatypes should be applied to the result
         of a libcudf join, baesd on the original left and right
         frames.
         """
+        data_dtypes = []
 
-        index_dtypes = {}
-        l_data_join_cols = {}
-        r_data_join_cols = {}
+        left_columns = list(self.lhs._data.columns)
+        right_columns = list(self.rhs._data.columns)
 
-        data_dtypes = {
-            name: col.dtype
-            for name, col in itertools.chain(
-                self.lhs._data.items(), self.rhs._data.items()
+        for drop_index in sorted(
+            (x[1] for x in columns_in_common), reverse=True
+        ):
+            del right_columns[drop_index]
+        all_columns = left_columns + right_columns
+
+        for col in all_columns:
+            data_dtypes.append(col.dtype)
+
+        for (left_on_index, right_on_index) in columns_in_common:
+            data_dtypes[left_on_index] = self.libcudf_to_output_casting_rules(
+                self.lhs._data.columns[left_on_index],
+                self.rhs._data.columns[right_on_index],
+                self.how,
             )
-        }
 
-        if self.left_index and self.right_index:
-            l_idx_join_cols = list(self.lhs.index._data.values())
-            r_idx_join_cols = list(self.rhs.index._data.values())
-        elif self.left_on and self.right_index:
-            # Keep the orignal dtypes in the LEFT index if possible
-            # should trigger a bunch of no-ops
-            l_idx_join_cols = list(self.lhs.index._data.values())
-            r_idx_join_cols = list(self.lhs.index._data.values())
-            for i, name in enumerate(self.left_on):
-                l_data_join_cols[name] = self.lhs._data[name]
-                r_data_join_cols[name] = list(self.rhs.index._data.values())[i]
-
-        elif self.left_index and self.right_on:
-            # see above
-            l_idx_join_cols = list(self.rhs.index._data.values())
-            r_idx_join_cols = list(self.rhs.index._data.values())
-            for i, name in enumerate(self.right_on):
-                l_data_join_cols[name] = list(self.lhs.index._data.values())[i]
-                r_data_join_cols[name] = self.rhs._data[name]
-
-        if self.left_on and self.right_on:
-            l_data_join_cols = self.lhs._data
-            r_data_join_cols = self.rhs._data
-
-        if self.left_index or self.right_index:
-            for i in range(len(self.lhs.index._data.items())):
-                index_dtypes[i] = self.libcudf_to_output_casting_rules(
-                    l_idx_join_cols[i], r_idx_join_cols[i], self.how
-                )
-
-        for name in itertools.chain(self.left_on, self.right_on):
-            if name in self.left_on and name in self.right_on:
-                data_dtypes[name] = self.libcudf_to_output_casting_rules(
-                    l_data_join_cols[name], r_data_join_cols[name], self.how
-                )
-        return (index_dtypes, data_dtypes)
+        return data_dtypes
 
     def typecast_libcudf_to_output(self, output, output_dtypes):
         """
         Apply precomputed output index and data column data types
         to the output of a libcudf join.
         """
-
-        index_dtypes, data_dtypes = output_dtypes
-        if output._index and len(index_dtypes) > 0:
-            for index_dtype, index_col_lbl, index_col in zip(
-                index_dtypes.values(),
-                output._index._data.keys(),
-                output._index._data.values(),
-            ):
-                if index_dtype:
-                    output._index._data[
-                        index_col_lbl
-                    ] = self._build_output_col(index_col, index_dtype)
+        data_dtypes = output_dtypes
         for data_col_lbl, data_col in output._data.items():
             data_dtype = data_dtypes[data_col_lbl]
             if data_dtype:
