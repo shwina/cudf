@@ -8,11 +8,12 @@ from libcpp.vector cimport vector
 from libcpp.pair cimport pair
 from libcpp cimport bool
 
-from cudf._lib.table cimport Table, columns_from_ptr
+from cudf._lib.table cimport Table
 from cudf._lib.move cimport move
 
 from cudf._lib.cpp.table.table cimport table
 from cudf._lib.cpp.table.table_view cimport table_view
+from cudf._lib.cpp.types cimport size_type
 cimport cudf._lib.cpp.join as cpp_join
 
 
@@ -21,10 +22,10 @@ cpdef join(
     Table rhs,
     object how,
     object method,
-    vector[int] left_on_ind,
-    vector[int] right_on_ind,
-    vector[pair[int, int]] c_columns_in_common,
-    vector[int] all_left_inds
+    vector[size_type] left_on_ind,
+    vector[size_type] right_on_ind,
+    vector[pair[size_type, size_type]] columns_in_common,
+    vector[size_type] all_left_inds
 ):
     """
     Call libcudf++ join for full outer, inner and left joins.
@@ -40,7 +41,7 @@ cpdef join(
                 rhs_view,
                 left_on_ind,
                 right_on_ind,
-                c_columns_in_common
+                columns_in_common
             ))
     elif how == 'left':
         with nogil:
@@ -49,7 +50,7 @@ cpdef join(
                 rhs_view,
                 left_on_ind,
                 right_on_ind,
-                c_columns_in_common
+                columns_in_common
             ))
     elif how == 'outer':
         with nogil:
@@ -58,7 +59,7 @@ cpdef join(
                 rhs_view,
                 left_on_ind,
                 right_on_ind,
-                c_columns_in_common
+                columns_in_common
             ))
     elif how == 'leftsemi':
         with nogil:
