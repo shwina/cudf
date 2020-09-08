@@ -380,7 +380,6 @@ std::unique_ptr<table> copy_if(
                                    mr,
                                    stream);
     });
-
     return std::make_unique<table>(std::move(out_columns));
   } else {
     return empty_like(input);

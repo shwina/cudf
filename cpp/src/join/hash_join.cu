@@ -17,7 +17,9 @@
 #include <cudf/detail/concatenate.cuh>
 #include <cudf/detail/gather.cuh>
 #include <cudf/detail/gather.hpp>
+#include <cudf/detail/replace.hpp>
 
+#include <iostream>
 #include "hash_join.cuh"
 
 namespace cudf {
@@ -410,23 +412,29 @@ std::pair<std::unique_ptr<table>, std::unique_ptr<table>> construct_join_output_
   if (join_kind::FULL_JOIN == JoinKind) {
     auto complement_indices = get_left_join_indices_complement(
       joined_indices.second, probe.num_rows(), build.num_rows(), stream);
-    if (not columns_in_common.empty()) {
-      auto common_from_build = detail::gather(build.select(build_common_col),
-                                              complement_indices.second.begin(),
-                                              complement_indices.second.end(),
-                                              nullify_out_of_bounds,
-                                              rmm::mr::get_current_device_resource(),
-                                              stream);
-      auto common_from_probe = detail::gather(probe.select(probe_common_col),
-                                              joined_indices.first.begin(),
-                                              joined_indices.first.end(),
-                                              nullify_out_of_bounds,
-                                              rmm::mr::get_current_device_resource(),
-                                              stream);
-      common_table           = cudf::detail::concatenate(
-        {common_from_build->view(), common_from_probe->view()}, mr, stream);
-    }
     joined_indices = concatenate_vector_pairs(complement_indices, joined_indices);
+    if (not columns_in_common.empty()) {
+      auto build_side = detail::gather(build.select(build_common_col),
+                                       joined_indices.second.begin(),
+                                       joined_indices.second.end(),
+                                       nullify_out_of_bounds,
+                                       rmm::mr::get_current_device_resource(),
+                                       stream);
+      auto probe_side = detail::gather(probe.select(probe_common_col),
+                                       joined_indices.first.begin(),
+                                       joined_indices.first.end(),
+                                       nullify_out_of_bounds,
+                                       rmm::mr::get_current_device_resource(),
+                                       stream);
+      std::vector<std::unique_ptr<column>> common_columns;
+      for (auto i = 0; i < build_side->num_columns(); ++i) {
+        common_columns.push_back(detail::replace_nulls(build_side->get_column(i).view(),
+                                                       probe_side->get_column(i).view(),
+                                                       rmm::mr::get_current_device_resource(),
+                                                       stream));
+      }
+      common_table = std::move(std::make_unique<cudf::table>(std::move(common_columns)));
+    }
   } else {
     if (not columns_in_common.empty()) {
       common_table = detail::gather(probe.select(probe_common_col),
