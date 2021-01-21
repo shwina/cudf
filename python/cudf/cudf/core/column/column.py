@@ -1324,7 +1324,7 @@ class ColumnBase(Column, Serializable):
                 for name, f in zip(names, result_frames)
             }
         )
-    
+
     def _binary_preprocess(self, fn, other, fill_value=None):
         _truediv_int_dtype_corrections = {
             "int8": "float32",
@@ -1350,24 +1350,25 @@ class ColumnBase(Column, Serializable):
                 self = self.fillna(fill_value)
             else:
                 if self.nullable and other.nullable:
-                    mask = cudf.core.buffer.Buffer(cupy.bitwise_or(self.nullmask, other.nullmask).view('uint8'))
+                    mask = cudf.core.buffer.Buffer(
+                        cupy.bitwise_or(self.nullmask, other.nullmask).view(
+                            "uint8"
+                        )
+                    )
                     self = self.fillna(fill_value)
                     other = other.fillna(fill_value)
                 elif self.nullable:
                     self = self.fillna(fill_value)
                 elif other.nullable:
                     other = other.fillna(fill_value)
-            
+
         return self, other, mask
 
     def _binary_op(self, fn, other, fill_value, reflect=False):
         lhs, rhs, mask = self._binary_preprocess(fn, other, fill_value)
-
         res = lhs.binary_operator(fn, rhs, reflect)
-
         if mask is not None:
-            res.set_mask(mask)
-
+            res = res.set_mask(mask)
         return res
 
 
@@ -1443,6 +1444,7 @@ def column_empty(row_count, dtype="object", masked=False):
     return build_column(
         data, dtype, mask=mask, size=row_count, children=children
     )
+
 
 def build_column(
     data, dtype, mask=None, size=None, offset=0, null_count=None, children=()
