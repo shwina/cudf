@@ -1368,7 +1368,7 @@ class ColumnBase(Column, Serializable):
         lhs, rhs, mask = self._binary_preprocess(fn, other, fill_value)
         res = lhs.binary_operator(fn, rhs, reflect)
         if mask is not None:
-            res = res.set_mask(mask)
+            res._base_mask = mask
         return res
 
 
