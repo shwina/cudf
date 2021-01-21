@@ -1324,6 +1324,51 @@ class ColumnBase(Column, Serializable):
                 for name, f in zip(names, result_frames)
             }
         )
+    
+    def _binary_preprocess(self, fn, other, fill_value=None):
+        _truediv_int_dtype_corrections = {
+            "int8": "float32",
+            "int16": "float32",
+            "int32": "float32",
+            "int64": "float64",
+            "uint8": "float32",
+            "uint16": "float32",
+            "uint32": "float64",
+            "uint64": "float64",
+            "bool": "float32",
+            "int": "float",
+        }
+
+        if fn == "truediv":
+            if str(self.dtype) in _truediv_int_dtype_corrections:
+                truediv_type = _truediv_int_dtype_corrections[str(self.dtype)]
+                self = self.astype(truediv_type)
+
+        mask = None
+        if fill_value is not None:
+            if is_scalar(other):
+                self = self.fillna(fill_value)
+            else:
+                if self.nullable and other.nullable:
+                    mask = cudf.core.buffer.Buffer(cupy.bitwise_or(self.nullmask, other.nullmask).view('uint8'))
+                    self = self.fillna(fill_value)
+                    other = other.fillna(fill_value)
+                elif self.nullable:
+                    self = self.fillna(fill_value)
+                elif other.nullable:
+                    other = other.fillna(fill_value)
+            
+        return self, other, mask
+
+    def _binary_op(self, fn, other, fill_value, reflect=False):
+        lhs, rhs, mask = self._binary_preprocess(fn, other, fill_value)
+
+        res = lhs.binary_operator(fn, rhs, reflect)
+
+        if mask is not None:
+            res.set_mask(mask)
+
+        return res
 
 
 def column_empty_like(column, dtype=None, masked=False, newsize=None):
@@ -1398,7 +1443,6 @@ def column_empty(row_count, dtype="object", masked=False):
     return build_column(
         data, dtype, mask=mask, size=row_count, children=children
     )
-
 
 def build_column(
     data, dtype, mask=None, size=None, offset=0, null_count=None, children=()

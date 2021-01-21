@@ -1181,32 +1181,7 @@ class Series(Frame, Serializable):
             lhs, rhs = self, other
         rhs = self._normalize_binop_value(rhs)
 
-        if fn == "truediv":
-            if str(lhs.dtype) in truediv_int_dtype_corrections:
-                truediv_type = truediv_int_dtype_corrections[str(lhs.dtype)]
-                lhs = lhs.astype(truediv_type)
-
-        if fill_value is not None:
-            if is_scalar(rhs):
-                lhs = lhs.fillna(fill_value)
-            else:
-                if lhs.nullable and rhs.nullable:
-                    lmask = Series(data=lhs.nullmask)
-                    rmask = Series(data=rhs.nullmask)
-                    mask = (lmask | rmask).data
-                    lhs = lhs.fillna(fill_value)
-                    rhs = rhs.fillna(fill_value)
-                    result = lhs._binaryop(rhs, fn=fn, reflect=reflect)
-                    data = column.build_column(
-                        data=result.data, dtype=result.dtype, mask=mask
-                    )
-                    return lhs._copy_construct(data=data)
-                elif lhs.nullable:
-                    lhs = lhs.fillna(fill_value)
-                elif rhs.nullable:
-                    rhs = rhs.fillna(fill_value)
-
-        outcol = lhs._column.binary_operator(fn, rhs, reflect=reflect)
+        outcol = lhs._column._binary_op(fn, rhs, fill_value, reflect=reflect)
         result = lhs._copy_construct(data=outcol, name=result_name)
         return result
 
@@ -4417,21 +4392,6 @@ class Series(Frame, Serializable):
         return self.index
 
     _accessors = set()
-
-
-truediv_int_dtype_corrections = {
-    "int8": "float32",
-    "int16": "float32",
-    "int32": "float32",
-    "int64": "float64",
-    "uint8": "float32",
-    "uint16": "float32",
-    "uint32": "float64",
-    "uint64": "float64",
-    "bool": "float32",
-    "int": "float",
-}
-
 
 class DatetimeProperties(object):
     """
