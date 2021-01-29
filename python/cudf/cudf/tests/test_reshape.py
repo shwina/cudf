@@ -474,3 +474,17 @@ def test_pivot_duplicate_error():
         gdf.pivot(index="a", columns="b")
     with pytest.raises(ValueError):
         gdf.pivot(index="b", columns="a")
+
+
+def test_explode():
+    pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [1, 2]})
+    gdf = cudf.from_pandas(pdf)
+
+    assert_eq(pdf.explode("a"), gdf.explode("a"), check_dtype=False)
+
+    assert_eq(pdf.explode("b"), gdf.explode("b"), check_dtype=False)
+
+    pdf = pd.DataFrame({"a": [[], []], "b": [1, 2]})
+    gdf = cudf.from_pandas(pdf)
+
+    assert_eq(pdf.explode("a"), gdf.explode("a"), check_dtype=False)

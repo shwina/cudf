@@ -10,7 +10,6 @@ import warnings
 from collections import OrderedDict, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Set, Tuple, Union
-from cudf._lib.reshape import explode
 
 import cupy
 import numpy as np
@@ -26,6 +25,7 @@ from pandas.io.formats.printing import pprint_thing
 import cudf
 from cudf import _lib as libcudf
 from cudf._lib.null_mask import MaskState, create_null_mask
+from cudf._lib.reshape import explode
 from cudf.core import column, reshape
 from cudf.core.abc import Serializable
 from cudf.core.column import as_column, column_empty
@@ -7278,9 +7278,11 @@ class DataFrame(Frame, Serializable):
         """
         Expand all list columns in the DataFrame.
         """
-        idx = self.index.nlevels + self._column_names.index(column)
-        return DataFrame._from_table(explode(self, idx))
-        
+        if is_list_dtype(self[column]):
+            idx = self.index.nlevels + self._column_names.index(column)
+            return DataFrame._from_table(explode(self, idx))
+        else:
+            return self
 
     _accessors = set()  # type: Set[Any]
 
